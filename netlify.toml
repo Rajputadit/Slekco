@@ -1,0 +1,9 @@
+[build]
+  base = "web"
+  publish = "dist/client"
+  command = "npm run build:client"
+
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
