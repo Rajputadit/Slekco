@@ -2,25 +2,50 @@
 // "current origin"). In the browser, a relative /api path is proxied by the
 // Express host in dev and by your reverse proxy / hosting config in prod.
 function baseUrl() {
+  let url = "";
   if (typeof window === "undefined") {
     // eslint-disable-next-line no-undef
-    return (typeof process !== "undefined" && process.env.API_URL) || "http://localhost:5000/api";
+    url = (typeof process !== "undefined" && process.env.API_URL) || "http://localhost:5000/api";
+  } else {
+    url = import.meta.env.VITE_API_URL || "/api";
   }
-  return import.meta.env.VITE_API_URL || "/api";
+
+  url = url.trim().replace(/\/+$/, "");
+  if ((url.startsWith("http://") || url.startsWith("https://")) && !url.endsWith("/api")) {
+    url = `${url}/api`;
+  }
+  return url;
 }
 
 async function request(path, options = {}) {
-  const res = await fetch(`${baseUrl()}${path}`, {
+  const url = `${baseUrl()}${path.startsWith("/") ? path : `/${path}`}`;
+  const res = await fetch(url, {
     headers: { "Content-Type": "application/json" },
     ...options,
   });
 
+  const contentType = res.headers.get("content-type") || "";
+  const isJson = contentType.includes("application/json");
+
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}));
-    const err = new Error(body.message || `Request failed: ${res.status}`);
+    let message = `Request failed: ${res.status}`;
+    if (isJson) {
+      const body = await res.json().catch(() => ({}));
+      message = body.message || message;
+    } else {
+      message = `Server responded with status ${res.status} (${contentType || "HTML"}). Check VITE_API_URL setting.`;
+    }
+    const err = new Error(message);
     err.status = res.status;
     throw err;
   }
+
+  if (!isJson) {
+    throw new Error(
+      `Expected JSON from API, but received ${contentType || "HTML"}. Verify that VITE_API_URL is correctly set in Vercel.`
+    );
+  }
+
   return res.json();
 }
 
